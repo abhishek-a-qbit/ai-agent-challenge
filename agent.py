@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from dataclasses import dataclass
 from langchain_groq import ChatGroq
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
 import dotenv
 
@@ -38,9 +38,9 @@ class PDFAnalyzer:
     """Analyzes PDF structure and extracts key information"""
     
     def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-pro",
-            google_api_key=os.getenv("GOOGLE_API_KEY")
+        self.llm = ChatGroq(
+            model="llama-3.1-8b-instant",
+            groq_api_key=os.getenv("GROQ_API_KEY")
         )
     
     def analyze_pdf_structure(self, pdf_path: str) -> Dict[str, Any]:
@@ -70,7 +70,11 @@ class PDFAnalyzer:
                 5. Recommended parsing approach
                 
                 PDF Info: {len(pages)} pages, tables: {[len(p.get('tables', [])) for p in pages]}
-                First page text preview: {pages[0]['text'][:500] if pages else 'No text'}
+                
+                Table Analysis:
+                {[f'Page {i+1}: {len(p.get("tables", []))} tables, {len(p.get("tables", [])[0]) if p.get("tables") else 0} columns' for i, p in enumerate(pages)]}
+                
+                First table structure: {tables[0][:3] if tables and tables[0] else 'No tables'}
                 """
                 
                 response = self.llm.invoke(prompt)
@@ -87,7 +91,7 @@ class CodeGenerator:
     
     def __init__(self):
         self.llm = ChatGroq(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             groq_api_key=os.getenv("GROQ_API_KEY")
         )
     
@@ -100,11 +104,19 @@ class CodeGenerator:
         Requirements:
         1. Function signature: def parse(pdf_path: str) -> pd.DataFrame
         2. Must return DataFrame matching this schema: {csv_schema}
-        3. Use pdfplumber for PDF processing
+        3. Use pdfplumber for PDF processing, focus on table extraction
         4. Handle errors gracefully
         5. Include proper type hints and docstring
+        6. The PDF contains transaction tables that need to be extracted and formatted
         
+        Expected CSV Schema: {csv_schema}
         PDF Analysis: {pdf_analysis.get('analysis', 'No analysis available')}
+        
+        Focus on:
+        - Extracting tables from PDF pages
+        - Processing transaction data (Date, Description, Debit Amt, Credit Amt, Balance)
+        - Handling empty cells and data formatting
+        - Ensuring output matches the expected CSV structure exactly
         
         Generate complete, runnable code with imports.
         """
@@ -272,6 +284,7 @@ def create_workflow() -> StateGraph:
     workflow.add_node("retry", retry_with_feedback)
     
     # Add edges
+    workflow.add_edge(START, "analyze_pdf")
     workflow.add_edge("analyze_pdf", "generate_code")
     workflow.add_edge("generate_code", "test_code")
     workflow.add_conditional_edges(
@@ -297,9 +310,9 @@ def main(target: str, pdf: str = None, csv: str = None):
     
     # Set default paths if not provided
     if not pdf:
-        pdf = f"data/{target}/{target}_sample.pdf"
+        pdf = f"data/{target}/{target} sample.pdf"
     if not csv:
-        csv = f"data/{target}/{target}_sample.csv"
+        csv = f"data/{target}/result.csv"
     
     # Check if files exist
     if not os.path.exists(pdf):
@@ -336,7 +349,7 @@ def main(target: str, pdf: str = None, csv: str = None):
     
     # Create and run workflow
     workflow = create_workflow()
-    app = workflow.compile(checkpointer=MemorySaver())
+    app = workflow.compile()
     
     print(f"🚀 Starting agent for {target} bank...")
     print(f"📄 PDF: {pdf}")
