@@ -14,11 +14,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_csv_schema():
     """Test that sample CSV can be loaded and has expected structure"""
-    csv_path = "data/icici/icici_sample.csv"
+    csv_path = "data/icici/result.csv"
     assert Path(csv_path).exists(), f"CSV file not found: {csv_path}"
     
     df = pd.read_csv(csv_path)
-    expected_columns = ['Date', 'Description', 'Debit', 'Credit', 'Balance']
+    expected_columns = ['Date', 'Description', 'Debit Amt', 'Credit Amt', 'Balance']
     
     assert list(df.columns) == expected_columns, f"Expected columns {expected_columns}, got {list(df.columns)}"
     assert len(df) > 0, "CSV should contain data"
@@ -54,7 +54,7 @@ def test_project_structure():
         'README.md',
         'custom_parsers/__init__.py',
         'custom_parsers/icici_parser.py',
-        'data/icici/icici_sample.csv'
+        'data/icici/result.csv'
     ]
     
     for file_path in required_files:

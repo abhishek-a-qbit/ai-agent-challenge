@@ -49,7 +49,7 @@ def parse(pdf_path: str) -> pd.DataFrame:
         df = pd.DataFrame(transactions)
         
         # Ensure DataFrame matches expected schema
-        expected_columns = ['Date', 'Description', 'Debit', 'Credit', 'Balance']
+        expected_columns = ['Date', 'Description', 'Debit Amt', 'Credit Amt', 'Balance']
         for col in expected_columns:
             if col not in df.columns:
                 df[col] = None
