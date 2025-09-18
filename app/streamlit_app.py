@@ -271,23 +271,27 @@ def main():
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 
-                # Parse the PDF using the generated code
-                parsed_df = module.parse(final_state['pdf_path'])
-                
-                st.subheader("Extracted Data")
-                st.dataframe(parsed_df)
-                
-                # Create a download button for the CSV
-                csv_buffer = io.StringIO()
-                parsed_df.to_csv(csv_buffer, index=False)
-                csv_bytes = csv_buffer.getvalue().encode('utf-8')
-                
-                st.download_button(
-                    label="Download Parsed CSV",
-                    data=csv_bytes,
-                    file_name=f"{target_bank}_statement_parsed.csv",
-                    mime="text/csv"
-                )
+                # Check for the 'parse' function before calling it
+                if hasattr(module, 'parse'):
+                    parsed_df = module.parse(final_state['pdf_path'])
+                    
+                    st.subheader("Extracted Data")
+                    st.dataframe(parsed_df)
+                    
+                    # Create a download button for the CSV
+                    csv_buffer = io.StringIO()
+                    parsed_df.to_csv(csv_buffer, index=False)
+                    csv_bytes = csv_buffer.getvalue().encode('utf-8')
+                    
+                    st.download_button(
+                        label="Download Parsed CSV",
+                        data=csv_bytes,
+                        file_name=f"{target_bank}_statement_parsed.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.error("Error: The generated parser code does not contain a 'parse' function.")
+                    st.warning("Please check the 'Final Code' section above for the generated code.")
                 
             else:
                 st.error(f"\n❌ Failed to generate parser.")
