@@ -43,7 +43,7 @@ class PDFAnalyzer:
     
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
+            model="llama-3.1-405b-instant",
             groq_api_key=groq_api_key
         )
     
@@ -93,7 +93,7 @@ class CodeGenerator:
     
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
+            model="llama-3.1-405b-instant",
             groq_api_key=groq_api_key
         )
     
@@ -166,6 +166,10 @@ def generate_code(state: AgentState) -> AgentState:
         state.target_bank
     )
     
+    if not code.strip():
+        state.errors.append("Code generation failed: The LLM returned an empty response.")
+        return state
+
     state.generated_code = code
     st.success("✅ Code generation completed")
     return state
