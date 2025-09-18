@@ -46,7 +46,7 @@ class PDFAnalyzer:
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
             model="llama-3.1-8b-instant",
-            groq_api_key=groq_api_key
+            groq_api_key="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"
         )
     
     def analyze_pdf_structure(self, pdf_path: str) -> Dict[str, Any]:
@@ -93,7 +93,7 @@ class CodeGenerator:
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
             model="llama-3.1-8b-instant",
-            groq_api_key=groq_api_key
+            groq_api_key= "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"
         )
     
     def generate_parser(self, pdf_analysis: Dict[str, Any], target_bank: str) -> str:
