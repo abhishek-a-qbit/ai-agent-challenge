@@ -129,18 +129,23 @@ class CodeGenerator:
         st.code(prompt)
 
         response = self.llm.invoke(prompt)
-        
+
+        st.info(f"LLM Response object: {repr(response)}")
         st.info("Raw LLM output:")
-        st.code(response.content)
         
-        # Sanitize the output to get only the code block
-        code = response.content
-        match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
-        if match:
-            code = match.group(1)
+        if not response.content.strip():
+            st.warning("LLM response content is empty.")
+            code = ""
         else:
-            # Fallback to the entire response if the code block is not found
+            st.code(response.content)
+            # Sanitize the output to get only the code block
             code = response.content
+            match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
+            if match:
+                code = match.group(1)
+            else:
+                # Fallback to the entire response if the code block is not found
+                code = response.content
         
         return code
 
