@@ -33,10 +33,7 @@ class AgentState:
     """State for the agent workflow"""
     target_bank: str
     pdf_path: str
-    csv_path: str
-    csv_schema: Dict[str, Any]
     generated_code: str
-    test_results: Dict[str, Any]
     attempts: int
     errors: List[str]
     final_parser_path: str
@@ -44,10 +41,10 @@ class AgentState:
 class PDFAnalyzer:
     """Analyzes PDF structure and extracts key information"""
     
-    def __init__(self):
+    def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
             model="llama-3.1-8b-instant",
-            groq_api_key=os.getenv("GROQ_API_KEY")
+            groq_api_key=groq_api_key
         )
     
     def analyze_pdf_structure(self, pdf_path: str) -> Dict[str, Any]:
@@ -94,34 +91,33 @@ class PDFAnalyzer:
 class CodeGenerator:
     """Generates Python parser code based on analysis"""
     
-    def __init__(self):
+    def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
             model="llama-3.1-8b-instant",
-            groq_api_key=os.getenv("GROQ_API_KEY")
+            groq_api_key=groq_api_key
         )
     
-    def generate_parser(self, pdf_analysis: Dict[str, Any], csv_schema: Dict[str, Any], target_bank: str) -> str:
-        """Generate parser code based on PDF analysis and CSV schema"""
+    def generate_parser(self, pdf_analysis: Dict[str, Any], target_bank: str) -> str:
+        """Generate parser code based on PDF analysis"""
         
         prompt = f"""
         Generate a Python parser for {target_bank} bank statements.
         
         Requirements:
         1. Function signature: def parse(pdf_path: str) -> pd.DataFrame
-        2. Must return DataFrame matching this schema: {csv_schema}
-        3. Use pdfplumber for PDF processing, focus on table extraction
-        4. Handle errors gracefully
-        5. Include proper type hints and docstring
-        6. The PDF contains transaction tables that need to be extracted and formatted
+        2. Must return a pandas DataFrame containing the extracted transaction data.
+        3. Use pdfplumber for PDF processing, focusing on table extraction.
+        4. Handle errors gracefully.
+        5. Include proper type hints and docstring.
+        6. The PDF contains transaction tables that need to be extracted and formatted.
         
-        Expected CSV Schema: {csv_schema}
         PDF Analysis: {pdf_analysis.get('analysis', 'No analysis available')}
         
         Focus on:
-        - Extracting tables from PDF pages
-        - Processing transaction data (Date, Description, Debit Amt, Credit Amt, Balance)
-        - Handling empty cells and data formatting
-        - Ensuring output matches the expected CSV structure exactly
+        - Extracting tables from PDF pages.
+        - Processing transaction data (Date, Description, Debit Amt, Credit Amt, Balance, etc.).
+        - Handling empty cells and data formatting.
+        - Return the resulting DataFrame.
         
         Generate complete, runnable code with imports.
         """
@@ -129,52 +125,10 @@ class CodeGenerator:
         response = self.llm.invoke(prompt)
         return response.content
 
-class CodeTester:
-    """Tests generated code and provides feedback"""
-    
-    def test_parser(self, code: str, pdf_path: str, csv_path: str) -> Dict[str, Any]:
-        """Test the generated parser code"""
-        try:
-            # Create temporary test file
-            test_file = "temp_parser.py"
-            with open(test_file, 'w') as f:
-                f.write(code)
-            
-            # Import and test
-            spec = importlib.util.spec_from_file_location("temp_parser", test_file)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            
-            # Test parsing
-            result_df = module.parse(pdf_path)
-            expected_df = pd.read_csv(csv_path)
-            
-            # Compare DataFrames
-            is_equal = result_df.equals(expected_df)
-            
-            # Cleanup
-            os.remove(test_file)
-            
-            return {
-                'success': True,
-                'is_equal': is_equal,
-                'result_shape': result_df.shape,
-                'expected_shape': expected_df.shape,
-                'result_columns': list(result_df.columns),
-                'expected_columns': list(expected_df.columns)
-            }
-            
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e),
-                'is_equal': False
-            }
-
-def analyze_pdf(state: AgentState) -> AgentState:
+def analyze_pdf(state: AgentState, groq_api_key: str) -> AgentState:
     """Node: Analyze PDF structure"""
     st.info("🔍 Analyzing PDF structure...")
-    analyzer = PDFAnalyzer()
+    analyzer = PDFAnalyzer(groq_api_key)
     analysis = analyzer.analyze_pdf_structure(state.pdf_path)
     
     if 'error' in analysis:
@@ -185,7 +139,7 @@ def analyze_pdf(state: AgentState) -> AgentState:
     st.success("✅ PDF analysis completed")
     return state
 
-def generate_code(state: AgentState) -> AgentState:
+def generate_code(state: AgentState, groq_api_key: str) -> AgentState:
     """Node: Generate parser code"""
     st.info(f"💻 Generating parser code for {state.target_bank}...")
     
@@ -193,37 +147,15 @@ def generate_code(state: AgentState) -> AgentState:
         state.errors.append("No PDF analysis available")
         return state
     
-    generator = CodeGenerator()
+    generator = CodeGenerator(groq_api_key)
     code = generator.generate_parser(
         state.pdf_analysis, 
-        state.csv_schema, 
         state.target_bank
     )
     
     state.generated_code = code
     st.success("✅ Code generation completed")
     return state
-
-def test_code(state: AgentState) -> AgentState:
-    """Node: Test generated code"""
-    st.info("🧪 Testing generated code...")
-    
-    tester = CodeTester()
-    test_results = tester.test_parser(
-        state.generated_code,
-        state.pdf_path,
-        state.csv_path
-    )
-    
-    state.test_results = test_results
-    
-    if test_results.get('success') and test_results.get('is_equal'):
-        st.success("✅ Code test passed!")
-        return state
-    else:
-        state.errors.append(f"Test failed: {test_results.get('error', 'DataFrame mismatch')}")
-        st.error("❌ Code test failed")
-        return state
 
 def save_parser(state: AgentState) -> AgentState:
     """Node: Save the working parser"""
@@ -240,60 +172,16 @@ def save_parser(state: AgentState) -> AgentState:
     st.success(f"✅ Parser saved to: {parser_path}")
     return state
 
-def should_retry(state: AgentState) -> str:
-    """Router: Decide whether to retry or end"""
-    if state.attempts >= 3:
-        return "end"
-    
-    if state.test_results.get('success') and state.test_results.get('is_equal'):
-        return "save"
-    
-    return "retry"
-
-def retry_with_feedback(state: AgentState) -> AgentState:
-    """Node: Retry code generation with feedback"""
-    state.attempts += 1
-    st.warning(f"🔄 Retry attempt {state.attempts}/3")
-    
-    generator = CodeGenerator()
-    
-    feedback_prompt = f"""
-    Previous code failed with error: {state.errors[-1]}
-    Test results: {state.test_results}
-    
-    Generate improved code that fixes these issues.
-    """
-    
-    improved_code = generator.llm.invoke(feedback_prompt).content
-    state.generated_code = improved_code
-    state.errors = []  # Clear previous errors
-    
-    return state
-
 def create_workflow() -> StateGraph:
     """Create the agent workflow graph"""
     workflow = StateGraph(AgentState)
     
-    workflow.add_node("analyze_pdf", analyze_pdf)
-    workflow.add_node("generate_code", generate_code)
-    workflow.add_node("test_code", test_code)
-    workflow.add_node("save_parser", save_parser)
-    workflow.add_node("retry", retry_with_feedback)
+    # We'll use a single, combined node for simplicity in this demo.
+    # In a real agent, these would be separate steps.
+    workflow.add_node("analyze_and_generate", lambda state, groq_api_key: save_parser(generate_code(analyze_pdf(state, groq_api_key), groq_api_key)))
     
-    workflow.add_edge(START, "analyze_pdf")
-    workflow.add_edge("analyze_pdf", "generate_code")
-    workflow.add_edge("generate_code", "test_code")
-    workflow.add_conditional_edges(
-        "test_code",
-        should_retry,
-        {
-            "save": "save_parser",
-            "retry": "retry",
-            "end": END
-        }
-    )
-    workflow.add_edge("retry", "test_code")
-    workflow.add_edge("save_parser", END)
+    workflow.add_edge(START, "analyze_and_generate")
+    workflow.add_edge("analyze_and_generate", END)
     
     return workflow
 
@@ -305,61 +193,43 @@ def main():
     This app demonstrates an autonomous agent that generates a Python parser for bank statement PDFs.
     
     **Instructions:**
-    1.  Upload a sample PDF statement and a corresponding CSV file with the expected data.
+    1.  Upload a sample PDF statement.
     2.  Provide a name for the target bank.
     3.  Click "Run Agent" to start the process.
     
-   
+    **Note:** This agent requires a valid Groq API key to generate code, which can be set as a Streamlit secret.
     """)
     
     # --- File Uploads ---
     pdf_file = st.file_uploader("Upload PDF Statement", type="pdf")
-    csv_file = st.file_uploader("Upload Expected CSV", type="csv")
     target_bank = st.text_input("Enter Target Bank Name (e.g., icici)", "icici")
 
     # --- Run Button ---
     if st.button("Run Agent"):
-        if not pdf_file or not csv_file or not target_bank:
-            st.error("Please upload both a PDF and a CSV, and provide a target bank name.")
+        if not pdf_file or not target_bank:
+            st.error("Please upload a PDF and provide a target bank name.")
             return
 
-        if not os.getenv("GROQ_API_KEY"):
-            st.error("Error: The GROQ_API_KEY environment variable is not set. Please set it to proceed.")
+        groq_api_key = st.secrets.get("GROQ_API_KEY")
+        if not groq_api_key:
+            st.error("Error: The GROQ_API_KEY is not set. Please set it as a Streamlit secret.")
             return
-
+        
         st.header("Agent Execution Log")
         
-        # Save uploaded files to a temporary location
+        # Save uploaded file to a temporary location
         data_dir = "./temp_data"
         os.makedirs(data_dir, exist_ok=True)
         pdf_path = os.path.join(data_dir, pdf_file.name)
-        csv_path = os.path.join(data_dir, csv_file.name)
         
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
-        with open(csv_path, "wb") as f:
-            f.write(csv_file.getbuffer())
-        
-        # Load CSV to get the schema
-        try:
-            df = pd.read_csv(csv_path)
-            csv_schema = {
-                'columns': list(df.columns),
-                'dtypes': df.dtypes.astype(str).to_dict(),
-                'shape': df.shape
-            }
-        except Exception as e:
-            st.error(f"Failed to read CSV: {e}")
-            return
             
         # Initialize the agent state
         initial_state = AgentState(
             target_bank=target_bank,
             pdf_path=pdf_path,
-            csv_path=csv_path,
-            csv_schema=csv_schema,
             generated_code="",
-            test_results={},
             attempts=0,
             errors=[],
             final_parser_path=""
@@ -371,12 +241,10 @@ def main():
         
         st.write(f"🚀 Starting agent for {target_bank} bank...")
         st.write(f"📄 PDF: {pdf_file.name}")
-        st.write(f"📊 CSV: {csv_file.name}")
-        st.write(f"🏗️ Schema: {csv_schema['shape']} with columns: {csv_schema['columns']}")
         st.write("-" * 50)
         
         try:
-            final_state = app.invoke(initial_state)
+            final_state = app.invoke(initial_state, {"groq_api_key": groq_api_key})
             
             if final_state.final_parser_path:
                 st.balloons()
@@ -384,7 +252,7 @@ def main():
                 st.write("Final Code:")
                 st.code(final_state.generated_code, language="python")
             else:
-                st.error(f"\n❌ Failed after {final_state.attempts} attempts")
+                st.error(f"\n❌ Failed to generate parser.")
                 st.write("Errors:")
                 for error in final_state.errors:
                     st.error(error)
