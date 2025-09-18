@@ -19,12 +19,10 @@ try:
     from langgraph.graph import StateGraph, END, START
     from langgraph.checkpoint.memory import MemorySaver
     import pdfplumber
-    import dotenv
-    dotenv.load_dotenv()
 except ImportError:
     st.error("""
     Please install the required libraries to run this agent:
-    `pip install streamlit pandas langchain-groq langgraph pdfplumber python-dotenv`
+    `pip install streamlit pandas langchain-groq langgraph pdfplumber`
     """)
     st.stop()
 
@@ -37,7 +35,7 @@ class AgentState:
     attempts: int
     errors: List[str]
     final_parser_path: str
-    pdf_analysis: Dict[str, Any]  # Add pdf_analysis to the state
+    pdf_analysis: Dict[str, Any]
 
 class PDFAnalyzer:
     """Analyzes PDF structure and extracts key information"""
@@ -62,7 +60,7 @@ class PDFAnalyzer:
                         'width': page.width,
                         'height': page.height
                     })
-                
+            
                 # Analyze with LLM
                 prompt = f"""
                 Analyze this PDF structure and provide:
@@ -76,7 +74,7 @@ class PDFAnalyzer:
                 
                 First table structure: {tables[0][:3] if tables and tables[0] else 'No tables'}
                 """
-                
+            
                 response = self.llm.invoke(prompt)
                 return {
                     'pages': pages,
@@ -175,9 +173,9 @@ class CodeGenerator:
         
         return code
 
-def analyze_pdf(state: AgentState) -> AgentState:
+# Modified to accept groq_api_key
+def analyze_pdf(state: AgentState, groq_api_key: str) -> AgentState:
     """Node: Analyze PDF structure"""
-    groq_api_key = st.secrets.get("GROQ_API_KEY")
     st.info("🔍 Analyzing PDF structure...")
     analyzer = PDFAnalyzer(groq_api_key)
     analysis = analyzer.analyze_pdf_structure(state.pdf_path)
@@ -190,9 +188,9 @@ def analyze_pdf(state: AgentState) -> AgentState:
     st.success("✅ PDF analysis completed")
     return state
 
-def generate_code(state: AgentState) -> AgentState:
+# Modified to accept groq_api_key
+def generate_code(state: AgentState, groq_api_key: str) -> AgentState:
     """Node: Generate parser code"""
-    groq_api_key = st.secrets.get("GROQ_API_KEY")
     st.info(f"💻 Generating parser code for {state.target_bank}...")
     
     if not hasattr(state, 'pdf_analysis'):
@@ -214,6 +212,23 @@ def generate_code(state: AgentState) -> AgentState:
     st.success("✅ Code generation completed")
     return state
 
+# Modified the workflow to pass the API key to the nodes
+def create_workflow(groq_api_key: str) -> StateGraph:
+    """Create the agent workflow graph"""
+    workflow = StateGraph(AgentState)
+    
+    # Pass the API key to the nodes
+    workflow.add_node("analyze_pdf", lambda state: analyze_pdf(state, groq_api_key))
+    workflow.add_node("generate_code", lambda state: generate_code(state, groq_api_key))
+    workflow.add_node("save_parser", save_parser)
+    
+    workflow.add_edge(START, "analyze_pdf")
+    workflow.add_edge("analyze_pdf", "generate_code")
+    workflow.add_edge("generate_code", "save_parser")
+    workflow.add_edge("save_parser", END)
+    
+    return workflow
+
 def save_parser(state: AgentState) -> AgentState:
     """Node: Save the working parser"""
     st.info("💾 Saving parser...")
@@ -229,49 +244,41 @@ def save_parser(state: AgentState) -> AgentState:
     st.success(f"✅ Parser saved to: {parser_path}")
     return state
 
-def create_workflow() -> StateGraph:
-    """Create the agent workflow graph"""
-    workflow = StateGraph(AgentState)
-    
-    workflow.add_node("analyze_pdf", analyze_pdf)
-    workflow.add_node("generate_code", generate_code)
-    workflow.add_node("save_parser", save_parser)
-    
-    workflow.add_edge(START, "analyze_pdf")
-    workflow.add_edge("analyze_pdf", "generate_code")
-    workflow.add_edge("generate_code", "save_parser")
-    workflow.add_edge("save_parser", END)
-    
-    return workflow
-
-# --- Streamlit UI and Main Function ---
 
 def main():
+    st.set_page_config(layout="wide", page_title="PDF Parser Generator")
     st.title("Agent-as-Coder: PDF Parser Generator")
     st.markdown("""
     This app demonstrates an autonomous agent that generates a Python parser for bank statement PDFs.
     
     **Instructions:**
-    1.  Upload a sample PDF statement.
-    2.  Provide a name for the target bank.
-    3.  Click "Run Agent" to start the process.
-    
-    **Note:** This agent requires a valid Groq API key to generate code, which can be set as a Streamlit secret.
+    1.  **Paste your Groq API key below.**
+    2.  Upload a sample PDF statement.
+    3.  Provide a name for the target bank.
+    4.  Click "Run Agent" to start the process.
     """)
     
+    # --- New API Key Input Slot ---
+    st.subheader("Enter Groq API Key")
+    groq_api_key = st.text_input(
+        label="Groq API Key", 
+        type="password", 
+        help="You can get a free key from https://console.groq.com/keys"
+    )
+    st.markdown("---")
+
     # --- File Uploads ---
     pdf_file = st.file_uploader("Upload PDF Statement", type="pdf")
     target_bank = st.text_input("Enter Target Bank Name (e.g., icici)", "icici")
 
     # --- Run Button ---
     if st.button("Run Agent"):
-        if not pdf_file or not target_bank:
-            st.error("Please upload a PDF and provide a target bank name.")
+        if not groq_api_key:
+            st.error("Error: The Groq API key is missing. Please enter your key.")
             return
 
-        groq_api_key = st.secrets.get("GROQ_API_KEY")
-        if not groq_api_key:
-            st.error("Error: The GROQ_API_KEY is not set. Please set it as a Streamlit secret.")
+        if not pdf_file or not target_bank:
+            st.error("Please upload a PDF and provide a target bank name.")
             return
         
         st.header("Agent Execution Log")
@@ -283,7 +290,7 @@ def main():
         
         with open(pdf_path, "wb") as f:
             f.write(pdf_file.getbuffer())
-            
+        
         # Initialize the agent state
         initial_state = AgentState(
             target_bank=target_bank,
@@ -295,8 +302,8 @@ def main():
             pdf_analysis={}
         )
         
-        # Create and run workflow
-        workflow = create_workflow()
+        # Create and run workflow with the API key
+        workflow = create_workflow(groq_api_key)
         app = workflow.compile()
         
         st.write(f"🚀 Starting agent for {target_bank} bank...")
@@ -350,7 +357,7 @@ def main():
                 st.write("Errors:")
                 for error in final_state.errors:
                     st.error(error)
-        
+            
         except Exception as e:
             st.error(f"❌ Workflow failed: {e}")
             st.write("Please check the logs above for more details.")
