@@ -9,6 +9,9 @@ from typing import Dict, Any, List
 from dataclasses import dataclass
 import importlib.util
 
+
+groq_api_key = "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"
+
 # --- Agent and Parser Logic ---
 # This section contains the core logic from the provided agent.py file.
 # It has been integrated into the Streamlit app for a single-file demonstration.
