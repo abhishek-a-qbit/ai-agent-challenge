@@ -123,7 +123,13 @@ class CodeGenerator:
         """
         
         response = self.llm.invoke(prompt)
-        return response.content
+        # Sanitize the output to get only the code block
+        code = response.content
+        match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
+        if match:
+            code = match.group(1)
+        
+        return code
 
 def analyze_pdf(state: AgentState) -> AgentState:
     """Node: Analyze PDF structure"""
