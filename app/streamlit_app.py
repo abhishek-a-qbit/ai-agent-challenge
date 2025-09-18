@@ -93,7 +93,7 @@ class CodeGenerator:
     
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
-            model="llama-3.1-405b-instant",
+            model="llama-3.1-8b-instant",
             groq_api_key=groq_api_key
         )
     
@@ -102,8 +102,8 @@ class CodeGenerator:
         
         st.subheader("Debugging LLM Call")
         with st.expander("Show LLM Connectivity Test"):
-            st.info("Testing a simple LLM call...")
-            test_prompt = "Generate a short Python code snippet that prints 'Hello, World!'."
+            st.info("Testing LLM connectivity by generating random content...")
+            test_prompt = "Generate a short, random paragraph about the future of technology."
             st.code(test_prompt)
             
             test_response = ""
@@ -111,7 +111,7 @@ class CodeGenerator:
                 test_response = self.llm.invoke(test_prompt)
                 if test_response and test_response.content:
                     st.success("Test Successful! LLM returned a response.")
-                    st.code(test_response.content)
+                    st.write(test_response.content)
                 else:
                     st.error("Test Failed! LLM returned an empty response.")
             except Exception as e:
