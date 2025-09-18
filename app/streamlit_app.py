@@ -93,7 +93,7 @@ class CodeGenerator:
     
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
-            model="llama-3.1-405b-instant",
+            model="llama-3.1-8b-instant",
             groq_api_key=groq_api_key
         )
     
@@ -127,25 +127,31 @@ class CodeGenerator:
         st.json(pdf_analysis)
         st.info("Prompt sent to LLM:")
         st.code(prompt)
-
-        response = self.llm.invoke(prompt)
+        
+        response = ""
+        try:
+            response = self.llm.invoke(prompt)
+        except Exception as e:
+            st.error(f"LLM invocation failed: {e}")
+            return ""
 
         st.info(f"LLM Response object: {repr(response)}")
-        st.info("Raw LLM output:")
         
-        if not response.content.strip():
+        if not response or not response.content:
             st.warning("LLM response content is empty.")
-            code = ""
+            return ""
+
+        st.info("Raw LLM output:")
+        st.code(response.content)
+
+        # Sanitize the output to get only the code block
+        code = response.content
+        match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
+        if match:
+            code = match.group(1)
         else:
-            st.code(response.content)
-            # Sanitize the output to get only the code block
+            # Fallback to the entire response if the code block is not found
             code = response.content
-            match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
-            if match:
-                code = match.group(1)
-            else:
-                # Fallback to the entire response if the code block is not found
-                code = response.content
         
         return code
 
@@ -194,7 +200,7 @@ def save_parser(state: AgentState) -> AgentState:
     parser_dir = Path("custom_parsers")
     parser_dir.mkdir(exist_ok=True)
     
-    parser_path = parser_dir / f"{state.target_bank}_parser1.py"
+    parser_path = parser_dir / f"{state.target_bank}_parser.py"
     with open(parser_path, 'w') as f:
         f.write(state.generated_code)
     
