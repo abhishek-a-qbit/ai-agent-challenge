@@ -122,11 +122,19 @@ class CodeGenerator:
         Generate complete, runnable code with imports.
         """
         
+        st.subheader("Debugging LLM Call")
+        st.info("Input PDF Analysis:")
+        st.json(pdf_analysis)
+        st.info("Prompt sent to LLM:")
+        st.code(prompt)
+
         response = self.llm.invoke(prompt)
+        
+        st.info("Raw LLM output:")
+        st.code(response.content)
+        
         # Sanitize the output to get only the code block
         code = response.content
-        st.info("Raw LLM output:")
-        st.code(code)
         match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
         if match:
             code = match.group(1)
