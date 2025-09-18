@@ -37,13 +37,14 @@ class AgentState:
     attempts: int
     errors: List[str]
     final_parser_path: str
+    pdf_analysis: Dict[str, Any]  # Add pdf_analysis to the state
 
 class PDFAnalyzer:
     """Analyzes PDF structure and extracts key information"""
     
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
-            model="llama-3.1-405b-instant",
+            model="llama-3.1-8b-instant",
             groq_api_key=groq_api_key
         )
     
@@ -72,9 +73,6 @@ class PDFAnalyzer:
                 5. Recommended parsing approach
                 
                 PDF Info: {len(pages)} pages, tables: {[len(p.get('tables', [])) for p in pages]}
-                
-                Table Analysis:
-                {[f'Page {i+1}: {len(p.get("tables", []))} tables, {len(p.get("tables", [])[0]) if p.get("tables") else 0} columns' for i, p in enumerate(pages)]}
                 
                 First table structure: {tables[0][:3] if tables and tables[0] else 'No tables'}
                 """
@@ -160,15 +158,20 @@ class CodeGenerator:
 
         st.info("Raw LLM output:")
         st.code(response.content)
-
+        
         # Sanitize the output to get only the code block
         code = response.content
         match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
         if match:
             code = match.group(1)
+            st.success("Successfully extracted code from code block.")
         else:
             # Fallback to the entire response if the code block is not found
             code = response.content
+            st.warning("Could not find a Python code block. Using the full response content.")
+        
+        st.info(f"Content of 'generated_code' before being returned (length: {len(code)}):")
+        st.code(code)
         
         return code
 
@@ -206,6 +209,7 @@ def generate_code(state: AgentState) -> AgentState:
         state.errors.append("Code generation failed: The LLM returned an empty response.")
         return state
 
+    # Correctly update the state with the generated code
     state.generated_code = code
     st.success("✅ Code generation completed")
     return state
@@ -287,7 +291,8 @@ def main():
             generated_code="",
             attempts=0,
             errors=[],
-            final_parser_path=""
+            final_parser_path="",
+            pdf_analysis={}
         )
         
         # Create and run workflow
@@ -300,25 +305,27 @@ def main():
         
         try:
             final_state = app.invoke(initial_state)
+            st.subheader("Final State after Workflow Completion:")
+            st.json(final_state)
             
-            if 'final_parser_path' in final_state and final_state['final_parser_path']:
+            if final_state.final_parser_path:
                 st.balloons()
-                st.success(f"\n🎉 Success! Parser generated at: {final_state['final_parser_path']}")
+                st.success(f"\n🎉 Success! Parser generated at: {final_state.final_parser_path}")
                 st.write("Final Code:")
-                st.code(final_state['generated_code'], language="python")
+                st.code(final_state.generated_code, language="python")
                 
                 # --- New Code for Parsing and Download ---
                 st.header("Parsed Output")
                 
                 # Dynamically import the generated parser
-                parser_path = final_state['final_parser_path']
+                parser_path = final_state.final_parser_path
                 spec = importlib.util.spec_from_file_location("dynamic_parser", parser_path)
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 
                 # Check for the 'parse' function before calling it
                 if hasattr(module, 'parse'):
-                    parsed_df = module.parse(final_state['pdf_path'])
+                    parsed_df = module.parse(final_state.pdf_path)
                     
                     st.subheader("Extracted Data")
                     st.dataframe(parsed_df)
@@ -341,11 +348,12 @@ def main():
             else:
                 st.error(f"\n❌ Failed to generate parser.")
                 st.write("Errors:")
-                for error in final_state['errors']:
+                for error in final_state.errors:
                     st.error(error)
         
         except Exception as e:
             st.error(f"❌ Workflow failed: {e}")
+            st.write("Please check the logs above for more details.")
 
 if __name__ == "__main__":
     main()
