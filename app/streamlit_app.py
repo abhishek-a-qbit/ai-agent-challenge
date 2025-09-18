@@ -194,7 +194,7 @@ def save_parser(state: AgentState) -> AgentState:
     parser_dir = Path("custom_parsers")
     parser_dir.mkdir(exist_ok=True)
     
-    parser_path = parser_dir / f"{state.target_bank}_parser.py"
+    parser_path = parser_dir / f"{state.target_bank}_parser1.py"
     with open(parser_path, 'w') as f:
         f.write(state.generated_code)
     
