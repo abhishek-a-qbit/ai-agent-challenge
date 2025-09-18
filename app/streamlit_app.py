@@ -93,12 +93,32 @@ class CodeGenerator:
     
     def __init__(self, groq_api_key: str):
         self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
+            model="llama-3.1-405b-instant",
             groq_api_key=groq_api_key
         )
     
     def generate_parser(self, pdf_analysis: Dict[str, Any], target_bank: str) -> str:
         """Generate parser code based on PDF analysis"""
+        
+        st.subheader("Debugging LLM Call")
+        with st.expander("Show LLM Connectivity Test"):
+            st.info("Testing a simple LLM call...")
+            test_prompt = "Generate a short Python code snippet that prints 'Hello, World!'."
+            st.code(test_prompt)
+            
+            test_response = ""
+            try:
+                test_response = self.llm.invoke(test_prompt)
+                if test_response and test_response.content:
+                    st.success("Test Successful! LLM returned a response.")
+                    st.code(test_response.content)
+                else:
+                    st.error("Test Failed! LLM returned an empty response.")
+            except Exception as e:
+                st.error(f"Test Failed! LLM invocation raised an exception: {e}")
+
+        st.info("Input PDF Analysis:")
+        st.json(pdf_analysis)
         
         prompt = f"""
         Generate a Python parser for {target_bank} bank statements.
@@ -122,10 +142,7 @@ class CodeGenerator:
         Generate complete, runnable code with imports.
         """
         
-        st.subheader("Debugging LLM Call")
-        st.info("Input PDF Analysis:")
-        st.json(pdf_analysis)
-        st.info("Prompt sent to LLM:")
+        st.info("Prompt sent to LLM for Parser Generation:")
         st.code(prompt)
         
         response = ""
