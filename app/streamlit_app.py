@@ -250,15 +250,15 @@ def main():
         try:
             final_state = app.invoke(initial_state)
             
-            if final_state.final_parser_path:
+            if 'final_parser_path' in final_state and final_state['final_parser_path']:
                 st.balloons()
-                st.success(f"\n🎉 Success! Parser generated at: {final_state.final_parser_path}")
+                st.success(f"\n🎉 Success! Parser generated at: {final_state['final_parser_path']}")
                 st.write("Final Code:")
-                st.code(final_state.generated_code, language="python")
+                st.code(final_state['generated_code'], language="python")
             else:
                 st.error(f"\n❌ Failed to generate parser.")
                 st.write("Errors:")
-                for error in final_state.errors:
+                for error in final_state['errors']:
                     st.error(error)
         
         except Exception as e:
