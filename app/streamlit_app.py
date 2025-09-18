@@ -9,23 +9,20 @@ from typing import Dict, Any, List
 from dataclasses import dataclass
 import importlib.util
 
-
-groq_api_key = "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"
-
 # --- Agent and Parser Logic ---
 # This section contains the core logic from the provided agent.py file.
 # It has been integrated into the Streamlit app for a single-file demonstration.
 
 # Ensure required libraries are available
 try:
-    from langchain_groq import ChatGroq
+    from langchain_openai import ChatOpenAI
     from langgraph.graph import StateGraph, END, START
     from langgraph.checkpoint.memory import MemorySaver
     import pdfplumber
 except ImportError:
     st.error("""
     Please install the required libraries to run this agent:
-    `pip install streamlit pandas langchain-groq langgraph pdfplumber`
+    `pip install streamlit pandas langchain-openai langgraph pdfplumber`
     """)
     st.stop()
 
@@ -43,10 +40,10 @@ class AgentState:
 class PDFAnalyzer:
     """Analyzes PDF structure and extracts key information"""
     
-    def __init__(self, groq_api_key: str):
-        self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
-            groq_api_key="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"
+    def __init__(self, openai_api_key: str):
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=openai_api_key
         )
     
     def analyze_pdf_structure(self, pdf_path: str) -> Dict[str, Any]:
@@ -90,10 +87,10 @@ class PDFAnalyzer:
 class CodeGenerator:
     """Generates Python parser code based on analysis"""
     
-    def __init__(self, groq_api_key: str):
-        self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
-            groq_api_key= "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"
+    def __init__(self, openai_api_key: str):
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=openai_api_key
         )
     
     def generate_parser(self, pdf_analysis: Dict[str, Any], target_bank: str) -> str:
@@ -176,11 +173,11 @@ class CodeGenerator:
         
         return code
 
-# Modified to accept groq_api_key
-def analyze_pdf(state: AgentState, groq_api_key: str) -> AgentState:
+# Modified to accept openai_api_key
+def analyze_pdf(state: AgentState, openai_api_key: str) -> AgentState:
     """Node: Analyze PDF structure"""
     st.info("🔍 Analyzing PDF structure...")
-    analyzer = PDFAnalyzer(groq_api_key)
+    analyzer = PDFAnalyzer(openai_api_key)
     analysis = analyzer.analyze_pdf_structure(state.pdf_path)
     
     if 'error' in analysis:
@@ -191,8 +188,8 @@ def analyze_pdf(state: AgentState, groq_api_key: str) -> AgentState:
     st.success("✅ PDF analysis completed")
     return state
 
-# Modified to accept groq_api_key
-def generate_code(state: AgentState, groq_api_key: str) -> AgentState:
+# Modified to accept openai_api_key
+def generate_code(state: AgentState, openai_api_key: str) -> AgentState:
     """Node: Generate parser code"""
     st.info(f"💻 Generating parser code for {state.target_bank}...")
     
@@ -200,7 +197,7 @@ def generate_code(state: AgentState, groq_api_key: str) -> AgentState:
         state.errors.append("No PDF analysis available")
         return state
     
-    generator = CodeGenerator(groq_api_key)
+    generator = CodeGenerator(openai_api_key)
     code = generator.generate_parser(
         state.pdf_analysis, 
         state.target_bank
@@ -216,13 +213,13 @@ def generate_code(state: AgentState, groq_api_key: str) -> AgentState:
     return state
 
 # Modified the workflow to pass the API key to the nodes
-def create_workflow(groq_api_key: str) -> StateGraph:
+def create_workflow(openai_api_key: str) -> StateGraph:
     """Create the agent workflow graph"""
     workflow = StateGraph(AgentState)
     
     # Pass the API key to the nodes
-    workflow.add_node("analyze_pdf", lambda state: analyze_pdf(state, groq_api_key))
-    workflow.add_node("generate_code", lambda state: generate_code(state, groq_api_key))
+    workflow.add_node("analyze_pdf", lambda state: analyze_pdf(state, openai_api_key))
+    workflow.add_node("generate_code", lambda state: generate_code(state, openai_api_key))
     workflow.add_node("save_parser", save_parser)
     
     workflow.add_edge(START, "analyze_pdf")
@@ -255,18 +252,18 @@ def main():
     This app demonstrates an autonomous agent that generates a Python parser for bank statement PDFs.
     
     **Instructions:**
-    1.  **Paste your Groq API key below.**
+    1.  **Paste your OpenAI API key below.**
     2.  Upload a sample PDF statement.
     3.  Provide a name for the target bank.
     4.  Click "Run Agent" to start the process.
     """)
     
     # --- New API Key Input Slot ---
-    st.subheader("Enter Groq API Key")
-    groq_api_key = st.text_input(
-        label="Groq API Key", 
+    st.subheader("Enter OpenAI API Key")
+    openai_api_key = st.text_input(
+        label="OpenAI API Key", 
         type="password", 
-        help="You can get a free key from https://console.groq.com/keys"
+        help="You can get a key from https://platform.openai.com/account/api-keys"
     )
     st.markdown("---")
 
@@ -276,8 +273,8 @@ def main():
 
     # --- Run Button ---
     if st.button("Run Agent"):
-        if not groq_api_key:
-            st.error("Error: The Groq API key is missing. Please enter your key.")
+        if not openai_api_key:
+            st.error("Error: The OpenAI API key is missing. Please enter your key.")
             return
 
         if not pdf_file or not target_bank:
@@ -306,7 +303,7 @@ def main():
         )
         
         # Create and run workflow with the API key
-        workflow = create_workflow(groq_api_key)
+        workflow = create_workflow(openai_api_key)
         app = workflow.compile()
         
         st.write(f"🚀 Starting agent for {target_bank} bank...")
