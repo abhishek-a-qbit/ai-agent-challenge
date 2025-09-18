@@ -255,6 +255,34 @@ def main():
                 st.success(f"\n🎉 Success! Parser generated at: {final_state['final_parser_path']}")
                 st.write("Final Code:")
                 st.code(final_state['generated_code'], language="python")
+                
+                # --- New Code for Parsing and Download ---
+                st.header("Parsed Output")
+                
+                # Dynamically import the generated parser
+                parser_path = final_state['final_parser_path']
+                spec = importlib.util.spec_from_file_location("dynamic_parser", parser_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                
+                # Parse the PDF using the generated code
+                parsed_df = module.parse(final_state['pdf_path'])
+                
+                st.subheader("Extracted Data")
+                st.dataframe(parsed_df)
+                
+                # Create a download button for the CSV
+                csv_buffer = io.StringIO()
+                parsed_df.to_csv(csv_buffer, index=False)
+                csv_bytes = csv_buffer.getvalue().encode('utf-8')
+                
+                st.download_button(
+                    label="Download Parsed CSV",
+                    data=csv_bytes,
+                    file_name=f"{target_bank}_statement_parsed.csv",
+                    mime="text/csv"
+                )
+                
             else:
                 st.error(f"\n❌ Failed to generate parser.")
                 st.write("Errors:")
