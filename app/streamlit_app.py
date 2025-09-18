@@ -125,8 +125,9 @@ class CodeGenerator:
         response = self.llm.invoke(prompt)
         return response.content
 
-def analyze_pdf(state: AgentState, groq_api_key: str) -> AgentState:
+def analyze_pdf(state: AgentState) -> AgentState:
     """Node: Analyze PDF structure"""
+    groq_api_key = st.secrets.get("GROQ_API_KEY")
     st.info("🔍 Analyzing PDF structure...")
     analyzer = PDFAnalyzer(groq_api_key)
     analysis = analyzer.analyze_pdf_structure(state.pdf_path)
@@ -139,8 +140,9 @@ def analyze_pdf(state: AgentState, groq_api_key: str) -> AgentState:
     st.success("✅ PDF analysis completed")
     return state
 
-def generate_code(state: AgentState, groq_api_key: str) -> AgentState:
+def generate_code(state: AgentState) -> AgentState:
     """Node: Generate parser code"""
+    groq_api_key = st.secrets.get("GROQ_API_KEY")
     st.info(f"💻 Generating parser code for {state.target_bank}...")
     
     if not hasattr(state, 'pdf_analysis'):
@@ -176,12 +178,14 @@ def create_workflow() -> StateGraph:
     """Create the agent workflow graph"""
     workflow = StateGraph(AgentState)
     
-    # We'll use a single, combined node for simplicity in this demo.
-    # In a real agent, these would be separate steps.
-    workflow.add_node("analyze_and_generate", lambda state, groq_api_key: save_parser(generate_code(analyze_pdf(state, groq_api_key), groq_api_key)))
+    workflow.add_node("analyze_pdf", analyze_pdf)
+    workflow.add_node("generate_code", generate_code)
+    workflow.add_node("save_parser", save_parser)
     
-    workflow.add_edge(START, "analyze_and_generate")
-    workflow.add_edge("analyze_and_generate", END)
+    workflow.add_edge(START, "analyze_pdf")
+    workflow.add_edge("analyze_pdf", "generate_code")
+    workflow.add_edge("generate_code", "save_parser")
+    workflow.add_edge("save_parser", END)
     
     return workflow
 
@@ -244,7 +248,7 @@ def main():
         st.write("-" * 50)
         
         try:
-            final_state = app.invoke(initial_state, {"groq_api_key": groq_api_key})
+            final_state = app.invoke(initial_state)
             
             if final_state.final_parser_path:
                 st.balloons()
