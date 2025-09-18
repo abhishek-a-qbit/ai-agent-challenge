@@ -309,7 +309,7 @@ def main():
     2.  Provide a name for the target bank.
     3.  Click "Run Agent" to start the process.
     
-    **Note:** This agent requires a valid Groq API key to generate code. Please set it as an environment variable or a Streamlit secret.
+   
     """)
     
     # --- File Uploads ---
